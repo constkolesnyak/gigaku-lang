@@ -1,0 +1,85 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Samsung TV remote token (the modern Tizen one; the legacy H-series .tv_token died with that TV)
+.tv_remote_token
+
+# Apple TV pairing credentials (pyatv storage)
+.atv_storage
+
+# macOS
+.DS_Store
+
+# The stub binary and its ad-hoc signature are built locally (README: clang + codesign)
+# from launchd/GigakuSound.m; only the bundle's Info.plist is source.
+launchd/GigakuSound.app/Contents/MacOS/
+launchd/GigakuSound.app/Contents/_CodeSignature/
+
+# Claude Code — settings and transcripts stay out, but the sentence-mining skill is code
+# this repo owns: its scripts import lib/vocab and freqdeck, and it is the only thing that
+# knows how a YouTube episode becomes a 🇩🇪 card. Ignoring it would version the
+# consumers of gigaku's word store without the consumer.
+.claude/*
+!.claude/skills/
+
+# `gigaku mine` working directory: downloaded audio, captions, drafts. Beside the project,
+# never in ~/Downloads.
+mining/
+
+# The MvJ Japanese add-on (third-party, no redistribution licence) is not in
+# this repo. Locally it is symlinked in at this path from a private checkout, so anki/link.sh
+# links it and tests/test_addon_config.py can read its config; a public clone has neither.
+anki/MvJ Japanese/
+
+# Anki add-ons (anki/, symlinked into addons21 by anki/link.sh): track the source, not Anki's
+# per-addon runtime state that it writes back through the symlink (__pycache__ already ignored above)
+anki/*/meta.json
+
+# The subtitle library the chrome/gigaku extension serves: ripped subtitles, not code.
+# It lives inside the extension so Chrome can fetch it without a server — see that README.
+chrome/gigaku/subs/
+
+# German frequency-list research: the big downloads and every intermediate stay out,
+# but the word list itself is freqdeck/'s input and the builders are code.
+freq/*
+!freq/README.md
+!freq/de-words.tsv
+!freq/de-words-3k.tsv
+!freq/de-yt-deck.tsv
+!freq/analyze.py
+!freq/blend.py
+!freq/build.py
+!freq/ctx2.py
+!freq/ctx_tat.py
+!freq/fold7.py
+!freq/foldlib.py
+!freq/known.py
+!freq/polish2.py
+!freq/ru.py
+!freq/ru_fill.py
+!freq/wikt.py
+
+# Frequency 🇩🇪 deck (freqdeck/): the generated half — candidates, scores, translations,
+# 132 MB of media, the apkg and the logs. The scripts and their README are tracked.
+freqdeck/out/
+
+# Long detached runs write their logs here (gigaku spell sweeps, etc).
+out/

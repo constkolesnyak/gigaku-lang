@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Once a day (01:05, an hour after the backup): render the vocabulary page into PUBLISH_DIR
+  (served tailnet-only at PUBLISH_URL by a small static server) — so the site stays
+  current without anyone remembering to run anything.
+
+  **This used to run `backup ; publish` at 21:00.** The backup moved to its own agent at
+  00:05 on 2026-08-03 (com.gigaku.backup) because the weekly report reads that
+  snapshot and a 21:00 one cut the reported week three hours short. Publish followed on
+  2026-08-08 (user's call: one hour after the backup, so the two schedules read as one
+  story instead of two times to keep in your head) — and 01:05 publishes the same finished
+  day the snapshot just closed, where a 21:00 page went stale for anything studied late
+  evening. Nothing leans on ordering — `publish` calls import_words() itself — the hour's
+  gap just keeps the two Chrome-IndexedDB readers from ever overlapping.
+
+  This has to run here, on the Mac: the word cache and Chrome's Migaku IndexedDB are both
+  local, and no web page may read another origin's IndexedDB, so no server could ever
+  gather this for itself. See lib/vocab/publish.py. The report host writes its weekly pages
+  straight into REPORT_SITE_DIR (bind-mounted into the container) and this job carries them
+  into the site; com.gigaku.publish-trigger does the same on demand, seconds after a report.
+
+  Publish is a local rsync, no network, nothing to fail against. A missed run (Mac asleep)
+  fires on the next wake.
+
+  Install:  cp launchd/com.gigaku.publish.plist ~/Library/LaunchAgents/
+            launchctl load ~/Library/LaunchAgents/com.gigaku.publish.plist
+  Run now:  launchctl kickstart -k gui/$(id -u)/com.gigaku.publish
+  Log:      /tmp/gigaku-publish.log
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.gigaku.publish</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/sh</string>
+		<string>-c</string>
+		<string>/Users/USERNAME/.local/bin/gigaku publish</string>
+	</array>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>1</integer>
+		<key>Minute</key>
+		<integer>5</integer>
+	</dict>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>StandardOutPath</key>
+	<string>/tmp/gigaku-publish.log</string>
+	<key>StandardErrorPath</key>
+	<string>/tmp/gigaku-publish.log</string>
+</dict>
+</plist>

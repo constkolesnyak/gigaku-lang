@@ -1,0 +1,66 @@
+{
+  "debug": false,
+  "counter": {
+    "enabled": true,
+    "notetype": "🇯🇵 MvJ",
+    "notetypes": [
+      "🇯🇵 MvJ",
+      "🇩🇪 German"
+    ],
+    "counter_field": "My Alternatives",
+    "sort_field": "My Sort Key",
+    "study_field": "am-study-morphs",
+    "allcount_field": "am-all-morphs-count",
+    "clarity_field": "My Clarity",
+    "sentence_field": "Sentence",
+    "learn_tag": "my-learn"
+  },
+  "nav": {
+    "enabled": true,
+    "goto_hotkey": "J",
+    "goto_de_hotkey": "K",
+    "de_notetype": "🇩🇪 German",
+    "goto_de_query": "",
+    "alternates_hotkey": "L",
+    "sort_descending": true
+  },
+  "keys": {
+    "enabled": true,
+    "known_tag": "",
+    "row_down_hotkey": "J",
+    "row_up_hotkey": "K",
+    "known_toggle_hotkey": "M",
+    "flag_translate_hotkey": "N",
+    "trim_audio_hotkey": "U",
+    "ask_question_hotkey": "Y"
+  },
+  "am_toolbar": {
+    "enabled": true
+  },
+  "recalc": {
+    "enabled": true,
+    "ja": true,
+    "de": true
+  },
+  "freq_order": {
+    "enabled": true
+  },
+  "merge": {
+    "enabled": true
+  },
+  "mvj_retunes": {
+    "enabled": true
+  },
+  "hotkey_ui": {
+    "enabled": true
+  },
+  "trimmer": {
+    "enabled": true
+  },
+  "cyrillic": {
+    "enabled": true
+  },
+  "browser_view": {
+    "enabled": true
+  }
+}

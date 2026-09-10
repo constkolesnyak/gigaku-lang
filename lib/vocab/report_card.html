@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gigaku — week</title>
+<!--
+  The week as ONE 1000×700 picture: every language a curve in ONE coordinate system.
+  lib/vocab/report.py fills __DATA__ with the whole `build()` payload and headless Chrome
+  screenshots it at 2×; the PNG goes to Telegram as a photo with the message as its caption.
+
+  Three shapes, in this order, each a user decision on 2026-08-01: a card per language sent
+  as an album → the cards stacked into one image → the languages sharing one chart. The last
+  step is the one with teeth: curves on separate axes are separate charts wearing one frame,
+  so the axis is now genuinely shared — one x from the earliest word anybody has, one y over
+  the largest total — and `build()` does that arithmetic, not this page.
+
+  Everything here is geometry. What the card *says* — every string, every rounded number —
+  was decided in report.py, so the picture and the message that travels with it can't
+  disagree. Drawing is hand-written SVG, like plots_page.html, and for the same reason: a
+  chart library would be a fourth dependency to draw one shape.
+
+  A picture has no hover layer, so nothing is left to a legend the eye has to walk back to:
+  a language's colour is on its own name in the header, and its total is printed at the end
+  of its own curve. The date span is deliberately absent — the caption says it once.
+
+  Colours are the validated categorical palette's dark steps, and the slot comes from
+  report.py — German is the blue it is in `gigaku plots`.
+-->
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--page); }
+  body {
+    font-family: "Helvetica Neue", Helvetica, "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+                 Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: var(--ink);
+  }
+  .card {
+    width: 1000px; height: 700px;
+    padding: 44px 48px 40px;
+    background: var(--surface);
+    display: flex; flex-direction: column;
+  }
+
+  /* The header is the legend. Each block names a language in its own curve's colour and
+     carries the one number the report is about; nothing else has to be matched up. */
+  header { display: flex; gap: 54px; }
+  .lang .who { display: flex; align-items: baseline; gap: 11px; }
+  .flag { font-size: 27px; line-height: 1; }
+  .name { font-size: 27px; font-weight: 700; letter-spacing: -0.3px; color: var(--accent); }
+  .week {
+    font-size: 25px; font-weight: 700; letter-spacing: -0.4px; margin-top: 9px;
+    color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.1;
+  }
+  .last { font-size: 14.5px; color: var(--muted); margin-top: 6px; }
+
+  .panel { margin-top: 34px; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .panel h2 {
+    font-size: 12.5px; font-weight: 700; color: var(--muted);
+    letter-spacing: 0.7px; text-transform: uppercase; margin-bottom: 8px;
+  }
+  #line { flex: 1; min-height: 0; }
+  .plot { width: 100%; height: 100%; display: block; }
+  .tick { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .value { font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="card">
+  <header id="legend"></header>
+  <section class="panel">
+    <h2>Known words</h2>
+    <div id="line"></div>
+  </section>
+</div>
+
+<script>
+  const D = __DATA__;
+
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+
+  document.getElementById("legend").innerHTML = D.languages.map((L) => `
+    <div class="lang" style="--accent:${esc(L.color)}">
+      <div class="who">
+        <span class="flag">${esc(L.flag)}</span>
+        <span class="name">${esc(L.name)}</span>
+      </div>
+      <div class="week">${esc(L.week_text)} last week</div>
+      <div class="last">${L.last_ago === "never" ? "" : "last word " + esc(L.last_ago)}</div>
+    </div>`).join("");
+
+  // The container is measured, not assumed: the chart takes whatever the header leaves.
+  function box(node) {
+    const r = node.getBoundingClientRect();
+    return { w: Math.round(r.width), h: Math.round(r.height) };
+  }
+
+  // End labels sit at their own curve's height, which is where two curves that finish close
+  // together would print over each other. Walk them from the top and push each one down to
+  // clear the last — a label that has moved is still beside its own dot, which is enough.
+  function spread(ys, gap) {
+    const order = ys.map((y, i) => [y, i]).sort((a, b) => a[0] - b[0]);
+    const out = ys.slice();
+    let floor = -Infinity;
+    for (const [y, i] of order) {
+      out[i] = Math.max(y, floor + gap);
+      floor = out[i];
+    }
+    return out;
+  }
+
+  function lineChart(node, c) {
+    const { w, h } = box(node);
+    const PAD_L = 46, PAD_R = 76, PAD_T = 12, PAD_B = 22;   // PAD_R holds the end labels
+    const pw = w - PAD_L - PAD_R, ph = h - PAD_T - PAD_B;
+    const n = Math.max(...c.series.map((s) => s.values.length));
+    const x = (i) => PAD_L + (n < 2 ? pw : (i / (n - 1)) * pw);
+    const y = (v) => PAD_T + ph - (v / c.ceiling) * ph;
+
+    let out = "";
+    for (const t of c.ticks) {
+      out += `<line x1="${PAD_L}" y1="${y(t.v)}" x2="${w - PAD_R}" y2="${y(t.v)}" ` +
+             `stroke="var(--grid)" stroke-width="1"/>` +
+             `<text class="tick" x="${PAD_L - 10}" y="${y(t.v) + 4}" text-anchor="end">${t.label}</text>`;
+    }
+    // Both ends are labelled, so they are nudged inside the plot instead of overhanging it.
+    c.xticks.forEach((t, i) => {
+      const anchor = i === 0 ? "start" : i === c.xticks.length - 1 ? "end" : "middle";
+      out += `<text class="tick" x="${x(t.i)}" y="${h - 4}" text-anchor="${anchor}">${t.label}</text>`;
+    });
+
+    // The week the report is about, marked on the history rather than described beside it.
+    // One band across the shared frame, drawn under every curve. Its edges come from
+    // report.py: the week is a calendar Monday-to-Sunday and no longer runs up to today,
+    // so it does not reach the right edge — and after a late run it can sit well short of it.
+    if (n > 1 && c.week_to >= c.week_from) {
+      const a = x(c.week_from), b = x(c.week_to);
+      out += `<rect x="${a}" y="${PAD_T}" width="${Math.max(b - a, 2)}" height="${ph}" ` +
+             `fill="var(--ink)" opacity="0.05"/>`;
+    }
+
+    for (const s of c.series) {
+      const pts = s.values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+      // No fill under a curve any more: two translucent areas overlapping would invent a
+      // third colour that means nothing. The line alone is the mark.
+      out += `<polyline points="${pts.join(" ")}" fill="none" stroke="${s.color}" ` +
+             `stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+    }
+
+    const ends = c.series.map((s) => y(s.values[s.values.length - 1] || 0));
+    const labels = spread(ends, 19);
+    c.series.forEach((s, i) => {
+      const ex = x(s.values.length - 1);
+      // The dot gets a ring in the surface colour, so it stays a dot where another curve
+      // runs under it, and the total is direct-labelled instead of read off the axis.
+      out += `<circle cx="${ex}" cy="${ends[i]}" r="5" fill="${s.color}" ` +
+             `stroke="var(--surface)" stroke-width="2"/>`;
+      out += `<text class="value" x="${ex + 11}" y="${labels[i] + 5}" ` +
+             `fill="${s.color}">${esc(s.end)}</text>`;
+    });
+
+    node.innerHTML = `<svg class="plot" viewBox="0 0 ${w} ${h}">${out}</svg>`;
+  }
+
+  lineChart(document.getElementById("line"), D.chart);
+  document.documentElement.dataset.drawn = "1";
+</script>
+</body>
+</html>

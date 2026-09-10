@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Once a day, just after midnight: snapshot the vocabulary data into git. See
+  lib/vocab/backup.py.
+
+  **Why 00:05 and not the 21:00 it used to share with publish.** The weekly report runs
+  on a separate host since 2026-08-03 and reads *this* snapshot (`gigaku report
+  --from-backup`), not the live cache. Its window is the last complete calendar week,
+  Monday–Sunday, so a Sunday-21:00 snapshot cut the reported week three hours short — and
+  those words were lost for good, not deferred: their mod date falls in the week just
+  reported, so the *next* week's window skips them too. A snapshot taken after midnight
+  contains the whole of the day it is snapshotting, which is what a daily backup should
+  have meant all along.
+
+  Five past, not on the hour: nothing here races the date rollover, and the machine has
+  enough else firing at exactly 00:00.
+
+  This has to run on the Mac and cannot move: it reads Migaku's list out of Chrome's
+  IndexedDB and the AnkiMorphs CSVs out of the Anki profile, both local. Chrome does NOT
+  need to be running — `_chrome_rows` reads the blob off disk and inflates it into a temp
+  SQLite — and at this hour it is more likely to have flushed than at nine in the evening.
+
+  Pushing works unattended only with an ssh key the agent can use without a prompt. A
+  missed run (Mac asleep) fires on the next wake. A failed or stale backup alerts Telegram
+  itself (lib/vocab/backup.py), and the report host's Monday job additionally checks how
+  old words.json is before it reports on it.
+
+  Install:  cp launchd/com.gigaku.backup.plist ~/Library/LaunchAgents/
+            launchctl load ~/Library/LaunchAgents/com.gigaku.backup.plist
+  Run now:  launchctl kickstart -k gui/$(id -u)/com.gigaku.backup
+  Log:      /tmp/gigaku-backup.log
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.gigaku.backup</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/sh</string>
+		<string>-c</string>
+		<string>/Users/USERNAME/.local/bin/gigaku backup</string>
+	</array>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>0</integer>
+		<key>Minute</key>
+		<integer>5</integer>
+	</dict>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>StandardOutPath</key>
+	<string>/tmp/gigaku-backup.log</string>
+	<key>StandardErrorPath</key>
+	<string>/tmp/gigaku-backup.log</string>
+</dict>
+</plist>

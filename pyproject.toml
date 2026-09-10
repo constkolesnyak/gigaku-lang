@@ -1,0 +1,53 @@
+[project]
+name = "gigaku"
+version = "0.2.0"
+description = "Language-learning toolkit for macOS: Netflix subtitle ripping, vocabulary tracking for Language Reactor + Migaku, Anki tooling, and a mouse-wheel Apple TV remote"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.14"
+dependencies = [
+    "pyobjc-framework-quartz>=12.1",
+    "pyatv>=0.18.0",
+    "openpyxl>=3.1",
+    # Declared, not added: pyatv already installs and requires aiohttp, so this pins
+    # nothing new. lib/samsung uses it directly for the TV's wss remote channel — the
+    # alternatives were a genuinely new dependency (websocket-client, what the retired
+    # lib/remote.py used) or hand-rolled RFC 6455 framing.
+    "aiohttp>=3.9",
+]
+
+[project.scripts]
+gigaku = "lib.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4",
+    "ruff>=0.16.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lib"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+# Single-letter names and lambda assignments are used on purpose in the research scripts.
+ignore = ["E731", "E741"]
+
+[tool.ruff.lint.per-file-ignores]
+# Standalone scripts run setup (sys.path, faulthandler) before their imports.
+"freq/*.py" = ["E402"]
+"scripts/scroll_volume.py" = ["E402"]
+# A double-fork helper written as three one-liners on purpose.
+"scripts/detach.py" = ["E701", "E702"]
