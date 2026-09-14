@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.gigaku.lanbypass</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/USERNAME/gigaku/scripts/lan_bypass.sh</string>
+    </array>
+    <!-- Run at boot (before the sound agent needs the Apple TV) and re-assert
+         every 30s so it survives ARP timeouts, Wi-Fi reassociation, the Apple TV
+         getting a new DHCP IP, and self-heals a poisoned negative route. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>30</integer>
+    <key>StandardOutPath</key>
+    <string>/tmp/gigaku-lanbypass.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/gigaku-lanbypass.log</string>
+</dict>
+</plist>

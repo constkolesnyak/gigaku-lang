@@ -1,0 +1,39 @@
+{
+  "anki_connect_url": "http://127.0.0.1:8765",
+  "note_type": "🇩🇪 German",
+  "field_map": {
+    "word": "Word",
+    "sentence": "Sentence",
+    "sentence_audio": "Sentence Audio",
+    "source": "Context"
+  },
+  "decks": {
+    "parent": "YouTube 🇩🇪",
+    "main": "YouTube 🇩🇪",
+    "deferred": ""
+  },
+  "dedupe_decks": [
+    "Frequency 🇩🇪",
+    "YouTube 🇩🇪"
+  ],
+  "known_words": {
+    "migaku_csv": "~/vocab-backup/migaku/de.csv",
+    "max_age_days": 14,
+    "gigaku_cache": "~/Library/Caches/gigaku/words.json"
+  },
+  "frequency": {
+    "yt_tsv": "freq/de-yt.tsv",
+    "words_tsv": "freq/de-words.tsv",
+    "grade_gate": 1500
+  },
+  "spacy": {
+    "model": "de_core_news_md",
+    "lemma_cache": "~/Library/Caches/gigaku/de_lemmas.json"
+  },
+  "media_prefix": "sm_de",
+  "tags": [
+    "claude-sentence-mining"
+  ],
+  "cap": 400,
+  "work_dir": "mining"
+}

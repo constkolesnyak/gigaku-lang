@@ -1,0 +1,58 @@
+<!doctype html>
+<!-- One week of the report, as a page: the same cards Telegram got, the same message,
+     at a URL — lib/vocab/report.py renders one of these per week plus index.html (the
+     latest week + the archive). Static on purpose: the cards are pictures, every number
+     a reader needs is on them, and a page of history needs no JavaScript to be one.
+     Dark is forced (data-theme below): the cards are dark PNGs and a light page around
+     them would frame every chart in glare. -->
+<html lang="en" data-theme="dark">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gigaku — Weekly</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+<meta name="darkreader-lock">
+<meta name="color-scheme" content="dark">
+
+<style>
+__BASE_CSS__
+
+  body {
+    margin: 0; padding: 28px 24px 64px;
+    background: var(--page); color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 14px; }
+  .spacer { flex: 1; }
+  a { color: var(--ink-2); }
+  .cards { display: grid; gap: 18px; margin-bottom: 18px; }
+  .cards img { width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--border); }
+  .message {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px 20px; margin-bottom: 18px; white-space: pre-line;
+  }
+  .archive { color: var(--muted); font-size: 13px; }
+  .archive ul { margin: 6px 0 0; padding-left: 18px; }
+  .archive li { line-height: 1.9; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Weekly report</h1>
+    <div class="sub">__SPAN__</div>
+    <div class="spacer"></div>
+    <a href="../">← Vocabulary</a>
+  </header>
+
+  <div class="cards">__CARDS__</div>
+
+  <div class="message">__MESSAGE__</div>
+
+  <div class="archive">
+    Past weeks
+    <ul>__ARCHIVE__</ul>
+  </div>
+</div>

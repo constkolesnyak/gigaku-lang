@@ -1,0 +1,1000 @@
+<!doctype html>
+<!-- The doctype is load-bearing: without it browsers render in quirks mode, where the box
+     model and line metrics quietly differ from everything this page was designed against. -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The browser tab wears the app's name, not the page heading: a tab reading "Vocabulary"
+     among twenty others tells you nothing about whose vocabulary, or what app put it there.
+     The heading inside the page still follows PLOTS_TITLE. -->
+<title>Gigaku</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+
+<!--
+  Hands off, Dark Reader. This page ships its own light and dark themes (and a toggle), and
+  the series colours are a palette validated for colour-blindness and contrast in both. An
+  extension re-darkening an already-dark page doesn't improve it — it repainted the legend's
+  colour keys to the background colour and made every language look identical, which for a
+  chart is not a cosmetic complaint. `darkreader-lock` is Dark Reader's own opt-out for
+  exactly this case; `color-scheme` tells every other well-behaved tool the same thing.
+-->
+<meta name="darkreader-lock">
+<meta name="color-scheme" content="light dark">
+
+<!--
+  The page `gigaku plots` writes. Everything is drawn here, by hand, in SVG: the lines, the
+  crosshair, the sparklines. polyglotka shipped Dash + Plotly + waitress + pandas + numpy —
+  a local web server and ~90MB of wheels — to draw nine cumulative curves. This is one file,
+  no server, no dependencies; open it, mail it, keep it.
+
+  Python fills in the JSON in <script id="data"> — nothing else. See lib/vocab/plots.py.
+-->
+
+<style>
+  /* Theme variables + the [hidden] fix come from lib/pages.py — one copy for every page. */
+__BASE_CSS__
+
+  body {
+    margin: 0;
+    padding: 28px 24px 64px;
+    background: var(--page);
+    color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 14px; }
+  .spacer { flex: 1; }
+
+  /* Controls: one row, above everything they scope. */
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
+  .seg { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 2px; }
+  .seg button {
+    appearance: none; border: 0; background: none; color: var(--ink-2);
+    font: inherit; font-size: 13px; padding: 5px 11px; border-radius: 7px; cursor: pointer;
+  }
+  .seg button:hover { background: var(--wash); }
+  .seg button[aria-pressed='true'] { background: var(--wash); color: var(--ink); font-weight: 600; }
+  .seg button:focus-visible, .legend button:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 1px; }
+  .ghost {
+    appearance: none; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink-2);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 6px 12px;
+  }
+  .ghost:hover { background: var(--wash); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px 20px; margin-bottom: 18px;
+  }
+  .card > h2 {
+    font-size: 14px; font-weight: 600; margin: 0 0 2px; color: var(--ink);
+  }
+  .card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .card-head .spacer { flex: 1; }
+
+  /* Stat tiles. Hero first, then one per language. */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+  .tile .label { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink-2); }
+  .tile .value { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; margin-top: 6px; }
+  .tile.hero .value { font-size: 44px; }
+  .tile .delta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .tile .delta b { color: var(--ink-2); font-weight: 600; }
+  .tile .spark { display: block; margin-top: 8px; }
+  .key { width: 14px; height: 3px; border-radius: 2px; flex: none; }
+
+  /* Legend — always present, never color-alone: name + line key, clickable. */
+  .legend { display: flex; gap: 6px; flex-wrap: wrap; }
+  .legend button {
+    display: flex; align-items: center; gap: 7px; cursor: pointer; font: inherit; font-size: 13px;
+    color: var(--ink-2); background: none; border: 1px solid transparent; border-radius: 8px; padding: 4px 8px;
+  }
+  .legend button:hover { background: var(--wash); }
+  .legend button[aria-pressed='false'] { opacity: 0.42; }
+  .legend button[aria-pressed='false'] .key { background: var(--muted) !important; }
+
+  /* pan-y, not none: drag-to-zoom only ever reads horizontal movement, and the page is
+     mostly read on a phone — a finger landing on a 420px chart must still scroll it. */
+  .plot { position: relative; touch-action: pan-y; }
+  .plot svg { display: block; width: 100%; overflow: visible; }
+  .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px 24px; }
+  .panel .head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+  .panel .name { font-size: 13px; font-weight: 600; }
+  .panel .note { font-size: 12px; color: var(--muted); }
+
+  /* Tooltip: value leads, series name follows. */
+  .tip {
+    position: absolute; pointer-events: none; opacity: 0; transition: opacity 90ms;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 10px; font-size: 13px; min-width: 132px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+  }
+  .tip .when { color: var(--muted); font-size: 12px; margin-bottom: 5px; }
+  .tip .row { display: flex; align-items: center; gap: 7px; line-height: 1.7; }
+  .tip .row b { font-variant-numeric: tabular-nums; color: var(--ink); min-width: 44px; text-align: right; }
+  .tip .row span { color: var(--ink-2); }
+
+  /* Kanji tab. A table, not a chart — the bar is only there so the eye can scan the counts. */
+  .tools { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .tools input {
+    font: inherit; font-size: 13px; padding: 6px 11px; min-width: 220px;
+    color: var(--ink); background: var(--page); border: 1px solid var(--border); border-radius: 9px;
+  }
+  .tools input:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 1px; }
+  .tools .count { color: var(--muted); font-size: 13px; }
+  .kanji-wrap { max-height: 620px; overflow-y: auto; overflow-x: auto; }
+  table.kanji { table-layout: fixed; }
+  table.kanji th:first-child, table.kanji td:first-child { width: 56px; text-align: center; }
+  table.kanji .char { font-size: 24px; line-height: 1.2; }
+  table.kanji th:nth-child(2), table.kanji td:nth-child(2),
+  table.kanji th:nth-child(3), table.kanji td:nth-child(3) { width: 130px; }
+  table.kanji td:last-child, table.kanji th:last-child { text-align: left; }
+  table.kanji .words { color: var(--ink-2); word-break: break-word; }
+  table.kanji .words .learning { color: var(--muted); }
+  .bar { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+  .bar .track { height: 4px; border-radius: 2px; flex: 1; max-width: 66px; background: var(--wash); }
+  .bar .fill { height: 100%; border-radius: 2px; display: block; }
+  thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+
+  details { margin-top: 4px; }
+  summary { cursor: pointer; color: var(--ink-2); font-size: 13px; padding: 4px 0; }
+  table { border-collapse: collapse; width: 100%; margin-top: 12px; font-size: 13px; }
+  th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; font-variant-numeric: normal; }
+  th { color: var(--muted); font-weight: 500; }
+  tbody tr:hover { background: var(--wash); }
+  .empty { color: var(--muted); padding: 40px 0; text-align: center; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1 id="title"></h1>
+    <div class="sub" id="subtitle"></div>
+    <div class="spacer"></div>
+    __NAV__
+    <button class="ghost" id="theme" title="Theme"></button>
+    <button class="ghost" id="png">Save PNG</button>
+  </header>
+
+  <div class="controls">
+    <div class="seg" id="tabs" role="tablist" aria-label="View"></div>
+    <div class="seg" id="range" role="group" aria-label="Date range"></div>
+    <div class="legend" id="legend" role="group" aria-label="Languages"></div>
+  </div>
+
+  <div id="view-vocabulary">
+  <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2>Words over time</h2>
+      <div class="spacer"></div>
+      <div class="seg" id="stage" role="group" aria-label="Which words the chart draws"></div>
+    </div>
+    <div class="plot" id="plot">
+      <svg id="chart" role="img" aria-label="Cumulative word count per language over time"></svg>
+      <div class="tip" id="tip"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Known vs learning</h2>
+    <div class="sub" style="margin-bottom: 14px">One panel per language — the split behind the totals above.</div>
+    <div class="panels" id="panels"></div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Table view — month-end totals</summary>
+      <div id="table"></div>
+    </details>
+  </div>
+  </div><!-- /view-vocabulary -->
+
+  <div id="view-kanji" hidden>
+    <div class="card">
+      <div class="card-head">
+        <h2>Kanji you know words for</h2>
+        <div class="spacer"></div>
+      </div>
+      <div class="sub" style="margin-bottom: 14px">
+        Ranked by how many words you know that contain them, then by words you're learning —
+        the same order <code>gigaku kanji</code> prints.
+      </div>
+      <div class="tools">
+        <input id="kanji-filter" type="search" placeholder="Filter by kanji or word — 日, 電話…"
+               aria-label="Filter kanji and words">
+        <span class="count" id="kanji-count"></span>
+      </div>
+      <div class="kanji-wrap">
+        <table class="kanji">
+          <thead>
+            <tr>
+              <th>Kanji</th>
+              <th>Known</th>
+              <th>Learning</th>
+              <th>Words</th>
+            </tr>
+          </thead>
+          <tbody id="kanji-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script id="data" type="application/json">__DATA__</script>
+
+<script>
+  'use strict';
+  const DATA = JSON.parse(document.getElementById('data').textContent);
+
+  // The validated categorical palette rides in the payload (lib/pages.py — one source for
+  // this page, the report card and anything next). A language owns its slot for good —
+  // filtering or hiding one never repaints the others.
+  const PALETTE = DATA.palette;
+  const DAY = 86400000;
+  const T0 = Date.parse(DATA.start + 'T00:00:00Z');
+  const N = DATA.days;
+
+  const RANGES = [
+    ['30d', 30], ['90d', 90], ['1y', 365], ['all', Infinity],
+  ];
+  const STAGES = [['total', 'Total'], ['known', 'Known'], ['learning', 'Learning']];
+
+  // What survives a reload: the page is opened daily from a phone bookmark, and starting
+  // every visit with three taps to restore range/languages/theme made the settings
+  // decoration. localStorage is origin-scoped, so file:// and the served site each keep
+  // their own — accepted. Zoom stays transient: it is a question, not a setting.
+  const STORE_KEY = 'gigaku.plots';
+  function loadStored() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+    catch (e) { return {}; }
+  }
+  function saveStored() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        theme: themeOverride, tab: state.tab, range: state.range, stage: state.stage,
+        hidden: [...state.hidden],
+      }));
+    } catch (e) { /* private mode — the page just forgets, as before */ }
+  }
+  const stored = loadStored();
+
+  // The theme follows the system by default; the toggle cycles Auto → Light → Dark for
+  // the times the two should disagree (a dark phone reading a chart in the sun). "Auto"
+  // keeps the old philosophy — macOS already has a switch — as the default, not the law.
+  const SYSTEM_DARK = matchMedia('(prefers-color-scheme: dark)');
+  let themeOverride = ['light', 'dark'].includes(stored.theme) ? stored.theme : 'auto';
+  const state = {
+    get theme() {
+      if (themeOverride !== 'auto') return themeOverride;
+      return SYSTEM_DARK.matches ? 'dark' : 'light';
+    },
+    tab: stored.tab === 'kanji' ? 'kanji' : 'vocabulary',
+    range: RANGES.some(([k]) => k === stored.range) ? stored.range : 'all',
+    zoom: null, // [i0, i1] — set by dragging on the chart; beats the preset
+    stage: STAGES.some(([k]) => k === stored.stage) ? stored.stage : 'total',
+    // The stored set wins over the payload's default, but only as an *override list*: a
+    // language added since (absent from it) starts visible, exactly like a first visit.
+    hidden: new Set(Array.isArray(stored.hidden) ? stored.hidden : DATA.hidden),
+  };
+
+  // ── data helpers ────────────────────────────────────────────────────────────
+  const color = (s) => PALETTE[state.theme][s.slot % 8];
+  const visible = () => DATA.series.filter((s) => !state.hidden.has(s.code));
+  const series = (s, stage) => {
+    stage = stage || state.stage;
+    if (stage === 'known') return s.known;
+    if (stage === 'learning') return s.learning;
+    return s.known.map((v, i) => v + s.learning[i]);
+  };
+  const dateAt = (i) => new Date(T0 + i * DAY);
+  const fmtDate = (i, withYear) =>
+    dateAt(i).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', timeZone: 'UTC',
+      year: withYear ? 'numeric' : undefined,
+    });
+  const fmtNum = (n) => n.toLocaleString('en-US');
+
+  function span() {
+    if (state.zoom) return state.zoom;
+    const days = RANGES.find((r) => r[0] === state.range)[1];
+    return [Math.max(0, N - 1 - days), N - 1];
+  }
+
+  // ── svg plumbing ────────────────────────────────────────────────────────────
+  const NS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, text) {
+    const node = document.createElementNS(NS, tag);
+    for (const k in attrs) node.setAttribute(k, attrs[k]);
+    if (text != null) node.appendChild(document.createTextNode(text)); // labels are data — never innerHTML
+    return node;
+  }
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  /**
+   * A monotone cubic (Fritsch–Carlson) path through the points. The curves are cumulative,
+   * so they only ever climb; a plain cubic spline would overshoot and draw dips that never
+   * happened. This one can't: it's the honest way to get a smooth line.
+   * (polyglotka smoothed by rewriting the y-values — an EMA over the *rate*, rescaled to
+   * land back on the true total. Nice curve, wrong numbers in between.)
+   */
+  function linePath(pts) {
+    const n = pts.length;
+    if (n === 0) return '';
+    if (n === 1) return `M${pts[0][0]},${pts[0][1]}`;
+    const dx = [], dy = [], m = [];
+    for (let i = 0; i < n - 1; i++) {
+      dx.push(pts[i + 1][0] - pts[i][0]);
+      dy.push(pts[i + 1][1] - pts[i][1]);
+      m.push(dy[i] / (dx[i] || 1));
+    }
+    const t = [m[0]];
+    for (let i = 1; i < n - 1; i++) {
+      if (m[i - 1] * m[i] <= 0) t.push(0);
+      else {
+        const w1 = 2 * dx[i] + dx[i - 1], w2 = dx[i] + 2 * dx[i - 1];
+        t.push((w1 + w2) / (w1 / m[i - 1] + w2 / m[i]));
+      }
+    }
+    t.push(m[n - 2]);
+    let d = `M${pts[0][0]},${pts[0][1]}`;
+    for (let i = 0; i < n - 1; i++) {
+      const h = dx[i] / 3;
+      d += `C${pts[i][0] + h},${pts[i][1] + t[i] * h} ${pts[i + 1][0] - h},${pts[i + 1][1] - t[i + 1] * h} ${pts[i + 1][0]},${pts[i + 1][1]}`;
+    }
+    return d;
+  }
+
+  function niceTicks(max, count) {
+    if (max <= 0) return [0];
+    const raw = max / count;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map((s) => s * mag).find((s) => s >= raw) || 10 * mag;
+    const ticks = [];
+    for (let v = 0; v <= max + step * 0.001; v += step) ticks.push(Math.round(v));
+    return ticks;
+  }
+
+  /** Month starts inside the span — or week starts when the span is short enough to need them. */
+  function xTicks(i0, i1) {
+    const out = [];
+    const weekly = i1 - i0 <= 70;
+    for (let i = i0; i <= i1; i++) {
+      const d = dateAt(i);
+      if (weekly ? d.getUTCDay() === 1 : d.getUTCDate() === 1) out.push(i);
+    }
+    if (!out.length) out.push(i0, i1);
+    const stride = Math.ceil(out.length / 9); // never crowd the axis
+    return out.filter((_, k) => k % stride === 0);
+  }
+
+  // ── the main chart ──────────────────────────────────────────────────────────
+  const plotBox = document.getElementById('plot');
+  const svg = document.getElementById('chart');
+  const tip = document.getElementById('tip');
+  let hover = null; // geometry the pointer handler needs, rebuilt on every draw
+
+  function drawChart() {
+    const W = plotBox.clientWidth || 900;
+    const H = 420;
+    const pad = { t: 14, r: 92, b: 30, l: 56 };
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('height', H);
+    svg.textContent = '';
+    hover = null;
+
+    const [i0, i1] = span();
+    const rows = visible();
+    if (!rows.length || i1 <= i0) {
+      svg.appendChild(el('text', {
+        x: W / 2, y: H / 2, 'text-anchor': 'middle', fill: css('--muted'), 'font-size': 14,
+      }, rows.length ? 'Not enough days in this range.' : 'No languages selected.'));
+      return;
+    }
+
+    const values = rows.map((s) => series(s).slice(i0, i1 + 1));
+    const yMax = Math.max(1, ...values.map((v) => Math.max(...v)));
+    const px = (i) => pad.l + ((i - i0) / (i1 - i0)) * (W - pad.l - pad.r);
+    const py = (v) => H - pad.b - (v / yMax) * (H - pad.t - pad.b);
+
+    // Grid + y ticks (hairline, solid, recessive).
+    for (const v of niceTicks(yMax, 5)) {
+      svg.appendChild(el('line', {
+        x1: pad.l, x2: W - pad.r, y1: py(v), y2: py(v),
+        stroke: v === 0 ? css('--axis') : css('--grid'), 'stroke-width': 1,
+      }));
+      svg.appendChild(el('text', {
+        x: pad.l - 10, y: py(v) + 4, 'text-anchor': 'end', fill: css('--muted'),
+        'font-size': 12, 'font-variant-numeric': 'tabular-nums',
+      }, fmtNum(v)));
+    }
+
+    // X ticks. The year rides along on January and on the first tick, nowhere else.
+    const ticks = xTicks(i0, i1);
+    ticks.forEach((i, k) => {
+      const d = dateAt(i);
+      const label = d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+      const withYear = k === 0 || d.getUTCMonth() === 0;
+      svg.appendChild(el('text', {
+        x: px(i), y: H - pad.b + 18, 'text-anchor': 'middle', fill: css('--muted'), 'font-size': 12,
+      }, withYear ? `${label} ${d.getUTCFullYear()}` : label));
+    });
+
+    // Lines. Sample down to ~2 points per pixel — a 5-year span is 1,800 days and the eye
+    // cannot use them all.
+    const stride = Math.max(1, Math.floor((i1 - i0) / (W * 2)));
+    const ends = [];
+    rows.forEach((s, k) => {
+      const pts = [];
+      for (let i = i0; i <= i1; i += stride) pts.push([px(i), py(values[k][i - i0])]);
+      if (pts[pts.length - 1][0] !== px(i1)) pts.push([px(i1), py(values[k][i1 - i0])]);
+      svg.appendChild(el('path', {
+        d: linePath(pts), fill: 'none', stroke: color(s), 'stroke-width': 2,
+        'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+      }));
+      ends.push({ s, x: px(i1), y: py(values[k][i1 - i0]), value: values[k][i1 - i0] });
+    });
+
+    // Direct end labels — identity without a trip to the legend. When lines converge, push
+    // the labels apart and hang a leader line off each, so a label never detaches silently.
+    ends.sort((a, b) => a.y - b.y);
+    const GAP = 15;
+    ends.forEach((e, i) => {
+      e.label = i === 0 ? e.y : Math.max(e.y, ends[i - 1].label + GAP);
+    });
+    ends.forEach((e) => {
+      const ly = Math.min(H - pad.b, Math.max(pad.t + 4, e.label));
+      if (Math.abs(ly - e.y) > 1) {
+        svg.appendChild(el('path', {
+          d: `M${e.x + 5},${e.y} L${e.x + 11},${ly}`, stroke: css('--axis'), 'stroke-width': 1, fill: 'none',
+        }));
+      }
+      svg.appendChild(el('circle', {
+        cx: e.x, cy: e.y, r: 4, fill: color(e.s), stroke: css('--surface'), 'stroke-width': 2,
+      }));
+      svg.appendChild(el('text', {
+        x: e.x + 14, y: ly + 4, fill: css('--ink-2'), 'font-size': 12, 'font-weight': 600,
+      }, e.s.name));
+    });
+
+    // Crosshair layer.
+    const rule = el('line', {
+      y1: pad.t, y2: H - pad.b, stroke: css('--axis'), 'stroke-width': 1, opacity: 0,
+    });
+    svg.appendChild(rule);
+    const dots = rows.map((s) => {
+      const dot = el('circle', {
+        r: 4.5, fill: color(s), stroke: css('--surface'), 'stroke-width': 2, opacity: 0,
+      });
+      svg.appendChild(dot);
+      return dot;
+    });
+    const band = el('rect', { x: pad.l, y: pad.t, width: W - pad.l - pad.r, height: H - pad.t - pad.b, fill: css('--ink'), opacity: 0 });
+    svg.appendChild(band);
+    hover = { i0, i1, pad, W, H, px, py, rows, values, rule, dots, band };
+  }
+
+  // ── hover + drag-to-zoom ────────────────────────────────────────────────────
+  function indexAt(clientX) {
+    const box = svg.getBoundingClientRect();
+    const scale = hover.W / box.width;
+    const x = (clientX - box.left) * scale;
+    const f = (x - hover.pad.l) / (hover.W - hover.pad.l - hover.pad.r);
+    return Math.round(hover.i0 + Math.min(1, Math.max(0, f)) * (hover.i1 - hover.i0));
+  }
+
+  let drag = null;
+  plotBox.addEventListener('pointermove', (ev) => {
+    if (!hover) return;
+    const i = indexAt(ev.clientX);
+    if (drag) {
+      drag.to = i;
+      hover.band.setAttribute('opacity', 0.06);
+      const [a, b] = [drag.from, drag.to].sort((x, y) => x - y);
+      hover.band.setAttribute('x', hover.px(a));
+      hover.band.setAttribute('width', Math.max(1, hover.px(b) - hover.px(a)));
+      return;
+    }
+    hover.rule.setAttribute('x1', hover.px(i));
+    hover.rule.setAttribute('x2', hover.px(i));
+    hover.rule.setAttribute('opacity', 1);
+
+    const rows = [];
+    hover.rows.forEach((s, k) => {
+      const v = hover.values[k][i - hover.i0];
+      hover.dots[k].setAttribute('cx', hover.px(i));
+      hover.dots[k].setAttribute('cy', hover.py(v));
+      hover.dots[k].setAttribute('opacity', 1);
+      rows.push({ s, v });
+    });
+
+    tip.textContent = '';
+    const when = document.createElement('div');
+    when.className = 'when';
+    when.textContent = fmtDate(i, true);
+    tip.appendChild(when);
+    rows.sort((a, b) => b.v - a.v).forEach(({ s, v }) => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const key = document.createElement('i');
+      key.className = 'key';
+      key.style.background = color(s);
+      const value = document.createElement('b');
+      value.textContent = fmtNum(v);
+      const name = document.createElement('span');
+      name.textContent = s.name;
+      row.append(key, value, name);
+      tip.appendChild(row);
+    });
+
+    const box = plotBox.getBoundingClientRect();
+    const x = hover.px(i) * (box.width / hover.W);
+    tip.style.opacity = 1;
+    tip.style.left = Math.min(box.width - tip.offsetWidth - 4, Math.max(0, x + 16)) + 'px';
+    tip.style.top = Math.max(0, ev.clientY - box.top - tip.offsetHeight - 12) + 'px';
+  });
+
+  plotBox.addEventListener('pointerleave', () => {
+    if (!hover) return;
+    tip.style.opacity = 0;
+    hover.rule.setAttribute('opacity', 0);
+    hover.dots.forEach((d) => d.setAttribute('opacity', 0));
+  });
+
+  plotBox.addEventListener('pointerdown', (ev) => {
+    if (!hover) return;
+    drag = { from: indexAt(ev.clientX), to: indexAt(ev.clientX) };
+    plotBox.setPointerCapture(ev.pointerId);
+    tip.style.opacity = 0;
+  });
+
+  function hideHover() {
+    if (!hover) return;
+    tip.style.opacity = 0;
+    hover.rule.setAttribute('opacity', 0);
+    hover.dots.forEach((d) => d.setAttribute('opacity', 0));
+    hover.band.setAttribute('opacity', 0);
+  }
+
+  plotBox.addEventListener('pointerup', (ev) => {
+    if (!drag) {
+      // A touch has no pointerleave: without this the crosshair and tooltip from the
+      // last tap stick to the chart until the next one.
+      if (ev.pointerType !== 'mouse') hideHover();
+      return;
+    }
+    const [a, b] = [drag.from, drag.to].sort((x, y) => x - y);
+    drag = null;
+    if (b - a >= 2) {
+      state.zoom = [a, b]; // drag to zoom; the range presets (or Reset) undo it
+      render();
+    } else if (hover) {
+      hover.band.setAttribute('opacity', 0);
+      if (ev.pointerType !== 'mouse') hideHover();
+    }
+  });
+
+  // The browser cancels a pointer it reclaims (the page scrolled, the palm hit the
+  // screen); a drag left half-alive would paint a zoom band no release ever clears.
+  plotBox.addEventListener('pointercancel', () => {
+    drag = null;
+    hideHover();
+  });
+
+  plotBox.addEventListener('dblclick', () => {
+    if (state.zoom) { state.zoom = null; render(); }
+  });
+
+  // ── tiles, panels, table ────────────────────────────────────────────────────
+  function sparkline(s, i0, i1, w, h) {
+    const node = el('svg', { width: w, height: h, class: 'spark', 'aria-hidden': 'true' });
+    const v = series(s, 'total').slice(i0, i1 + 1);
+    const lo = Math.min(...v), hi = Math.max(...v);
+    const pts = v.map((y, i) => [
+      (i / Math.max(1, v.length - 1)) * (w - 4) + 2,
+      h - 3 - ((y - lo) / Math.max(1, hi - lo)) * (h - 6),
+    ]);
+    node.appendChild(el('path', {
+      d: linePath(pts), fill: 'none', stroke: color(s), 'stroke-width': 1.5, opacity: 0.55,
+      'stroke-linecap': 'round',
+    }));
+    node.appendChild(el('circle', { cx: pts[pts.length - 1][0], cy: pts[pts.length - 1][1], r: 2.5, fill: color(s) }));
+    return node;
+  }
+
+  function tile({ label, value, delta, key, spark, hero }) {
+    const node = document.createElement('div');
+    node.className = 'tile' + (hero ? ' hero' : '');
+    const head = document.createElement('div');
+    head.className = 'label';
+    if (key) {
+      const dot = document.createElement('i');
+      dot.className = 'key';
+      dot.style.background = key;
+      head.appendChild(dot);
+    }
+    const name = document.createElement('span');
+    name.textContent = label;
+    head.appendChild(name);
+    const val = document.createElement('div');
+    val.className = 'value';
+    val.textContent = fmtNum(value);
+    const sub = document.createElement('div');
+    sub.className = 'delta';
+    const strong = document.createElement('b');
+    strong.textContent = delta.strong;
+    sub.append(strong, document.createTextNode(' ' + delta.rest));
+    node.append(head, val, sub);
+    if (spark) node.appendChild(spark);
+    return node;
+  }
+
+  function drawTiles() {
+    const [i0, i1] = span();
+    const box = document.getElementById('tiles');
+    box.textContent = '';
+    const rows = visible();
+    if (!rows.length) return;
+
+    const total = (i) => rows.reduce((sum, s) => sum + s.known[i] + s.learning[i], 0);
+    const added = total(i1) - total(i0);
+    // Say which total this is: with a language toggled off it is *not* the number in the
+    // subtitle, and a hero figure that quietly disagrees with the header is a bug report.
+    box.appendChild(tile({
+      label: rows.length === DATA.series.length ? 'All words' : `Words in view (${rows.length} of ${DATA.series.length} languages)`,
+      value: total(i1), hero: true,
+      delta: { strong: (added >= 0 ? '+' : '') + fmtNum(added), rest: 'in range' },
+    }));
+
+    rows.forEach((s) => {
+      const now = s.known[i1] + s.learning[i1];
+      const gained = now - (s.known[i0] + s.learning[i0]);
+      const node = tile({
+        label: s.name, value: now, key: color(s),
+        delta: { strong: (gained >= 0 ? '+' : '') + fmtNum(gained), rest: `in range · ${fmtNum(s.known[i1])} known` },
+        spark: null,
+      });
+      node.appendChild(sparkline(s, i0, i1, 140, 30));
+      box.appendChild(node);
+    });
+  }
+
+  function drawPanels() {
+    const [i0, i1] = span();
+    const box = document.getElementById('panels');
+    box.textContent = '';
+    const rows = visible();
+    if (!rows.length) {
+      const none = document.createElement('div');
+      none.className = 'empty';
+      none.textContent = 'No languages selected.';
+      box.appendChild(none);
+      return;
+    }
+
+    // Two passes: build the panels, then draw each at the width the grid actually gave it.
+    // (Stretching one SVG to fit would smear the stroke widths with it.)
+    const panels = rows.map((s) => {
+      const panel = document.createElement('div');
+      panel.className = 'panel';
+      const head = document.createElement('div');
+      head.className = 'head';
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = s.name;
+      const note = document.createElement('div');
+      note.className = 'note';
+      note.textContent = `${fmtNum(s.known[i1])} known · ${fmtNum(s.learning[i1])} learning`;
+      head.append(name, note);
+      panel.appendChild(head);
+      box.appendChild(panel);
+      return { s, panel };
+    });
+
+    panels.forEach(({ s, panel }) => {
+      const W = panel.clientWidth || 280, H = 130, pad = { t: 14, r: 6, b: 10, l: 6 };
+      const node = el('svg', { viewBox: `0 0 ${W} ${H}`, height: H, role: 'img' });
+      node.setAttribute('aria-label', `${s.name}: known and learning words over time`);
+      const yMax = Math.max(1, s.known[i1], s.learning[i1]);
+      const px = (i) => pad.l + ((i - i0) / Math.max(1, i1 - i0)) * (W - pad.l - pad.r);
+      const py = (v) => H - pad.b - (v / yMax) * (H - pad.t - pad.b);
+      const stride = Math.max(1, Math.floor((i1 - i0) / (W * 2)));
+      const path = (arr) => {
+        const pts = [];
+        for (let i = i0; i <= i1; i += stride) pts.push([px(i), py(arr[i])]);
+        pts.push([px(i1), py(arr[i1])]);
+        return linePath(pts);
+      };
+
+      node.appendChild(el('line', {
+        x1: pad.l, x2: W - pad.r, y1: py(0), y2: py(0), stroke: css('--axis'), 'stroke-width': 1,
+      }));
+      const known = path(s.known);
+      node.appendChild(el('path', {
+        d: `${known} L${px(i1)},${py(0)} L${px(i0)},${py(0)} Z`, fill: color(s), opacity: 0.1, stroke: 'none',
+      }));
+      node.appendChild(el('path', {
+        d: known, fill: 'none', stroke: color(s), 'stroke-width': 2, 'stroke-linecap': 'round',
+      }));
+      // Same hue, dashed: within a panel the language is the panel, so the dash carries the
+      // stage. Only a mark is dashed here — never a gridline.
+      node.appendChild(el('path', {
+        d: path(s.learning), fill: 'none', stroke: color(s), 'stroke-width': 2, 'stroke-dasharray': '4 4',
+        'stroke-linecap': 'round', opacity: 0.75,
+      }));
+      // Direct labels, kept inside the box — a label clipped by its own panel is worse than
+      // no label. If the two lines end too close together, only the top one gets named; the
+      // panel heading already carries both numbers.
+      const label = (y, text, fill) =>
+        node.appendChild(el('text', {
+          x: px(i1) - 2, y: Math.min(H - 3, Math.max(pad.t - 3, y - 6)), 'text-anchor': 'end',
+          fill, 'font-size': 11,
+        }, text));
+      const yKnown = py(s.known[i1]), yLearning = py(s.learning[i1]);
+      label(yKnown, 'known', css('--ink-2'));
+      if (Math.abs(yKnown - yLearning) > 14) label(yLearning, 'learning', css('--muted'));
+      panel.appendChild(node);
+    });
+  }
+
+  function drawTable() {
+    const [i0, i1] = span();
+    const rows = visible();
+    const box = document.getElementById('table');
+    box.textContent = '';
+    if (!rows.length) return;
+
+    // Month ends inside the range, plus the last day — the numbers the chart draws, readable
+    // without a pointer.
+    const marks = [];
+    for (let i = i0; i <= i1; i++) {
+      const next = dateAt(i + 1);
+      if (i === i1 || next.getUTCDate() === 1) marks.push(i);
+    }
+
+    const table = document.createElement('table');
+    const head = document.createElement('tr');
+    head.appendChild(Object.assign(document.createElement('th'), { textContent: 'Month' }));
+    rows.forEach((s) => {
+      ['known', 'learning'].forEach((stage) => {
+        const th = document.createElement('th');
+        th.textContent = `${s.name} ${stage}`;
+        head.appendChild(th);
+      });
+    });
+    const thead = document.createElement('thead');
+    thead.appendChild(head);
+    const tbody = document.createElement('tbody');
+    marks.slice().reverse().forEach((i) => {
+      const tr = document.createElement('tr');
+      const when = document.createElement('td');
+      when.textContent = dateAt(i).toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+      tr.appendChild(when);
+      rows.forEach((s) => {
+        [s.known[i], s.learning[i]].forEach((v) => {
+          const td = document.createElement('td');
+          td.textContent = fmtNum(v);
+          tr.appendChild(td);
+        });
+      });
+      tbody.appendChild(tr);
+    });
+    table.append(thead, tbody);
+    box.appendChild(table);
+  }
+
+  // ── kanji tab ───────────────────────────────────────────────────────────────
+  const KANJI = DATA.kanji || [];
+  const kanjiMax = Math.max(1, ...KANJI.map((k) => k.known.length));
+
+  function drawKanji() {
+    const query = document.getElementById('kanji-filter').value.trim();
+    const body = document.getElementById('kanji-rows');
+    body.textContent = '';
+
+    // Match the kanji itself or any word it appears in — you rarely remember the character,
+    // you remember the word you met it in.
+    const rows = query
+      ? KANJI.filter((k) =>
+          k.char === query ||
+          k.known.some((w) => w.includes(query)) ||
+          k.learning.some((w) => w.includes(query)))
+      : KANJI;
+
+    document.getElementById('kanji-count').textContent =
+      `${fmtNum(rows.length)} of ${fmtNum(KANJI.length)} kanji`;
+
+    rows.forEach((k) => {
+      const tr = document.createElement('tr');
+
+      const char = document.createElement('td');
+      char.className = 'char';
+      char.textContent = k.char; // untrusted-ish data: never innerHTML
+      tr.appendChild(char);
+
+      // The bar re-encodes the number beside it — it earns its ink only because the table is
+      // long and ranked, so the eye needs somewhere to land. The count stays readable alone.
+      const known = document.createElement('td');
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      const value = document.createElement('span');
+      value.textContent = fmtNum(k.known.length);
+      const track = document.createElement('span');
+      track.className = 'track';
+      const fill = document.createElement('span');
+      fill.className = 'fill';
+      fill.style.width = `${Math.max(3, (k.known.length / kanjiMax) * 100)}%`;
+      fill.style.background = PALETTE[state.theme][0];
+      track.appendChild(fill);
+      bar.append(value, track);
+      known.appendChild(bar);
+      tr.appendChild(known);
+
+      const learning = document.createElement('td');
+      learning.textContent = fmtNum(k.learning.length);
+      tr.appendChild(learning);
+
+      const words = document.createElement('td');
+      words.className = 'words';
+      words.appendChild(document.createTextNode(k.known.join('、')));
+      if (k.learning.length) {
+        const rest = document.createElement('span');
+        rest.className = 'learning';
+        rest.textContent = (k.known.length ? '　' : '') + k.learning.join('、');
+        words.appendChild(rest);
+      }
+      tr.appendChild(words);
+
+      body.appendChild(tr);
+    });
+  }
+
+  function showTab(tab) {
+    state.tab = tab;
+    document.getElementById('view-vocabulary').hidden = tab !== 'vocabulary';
+    document.getElementById('view-kanji').hidden = tab !== 'kanji';
+    document.getElementById('png').hidden = tab !== 'vocabulary'; // nothing to rasterise here
+    // The date range and the legend scope the vocabulary view; the kanji table is a snapshot
+    // of what you know now, so they'd be lying if they stayed visible next to it.
+    document.getElementById('range').hidden = tab !== 'vocabulary';
+    document.getElementById('legend').hidden = tab !== 'vocabulary';
+    render();
+  }
+
+  // ── controls ────────────────────────────────────────────────────────────────
+  function drawControls() {
+    const tabs = document.getElementById('tabs');
+    tabs.textContent = '';
+    tabs.hidden = !KANJI.length; // no Japanese, no tab bar — there's nothing to switch to
+    if (KANJI.length) {
+      [['vocabulary', 'Vocabulary'], ['kanji', 'Kanji']].forEach(([key, label]) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.setAttribute('role', 'tab');
+        b.setAttribute('aria-pressed', state.tab === key);
+        b.onclick = () => showTab(key);
+        tabs.appendChild(b);
+      });
+    }
+
+    const range = document.getElementById('range');
+    range.textContent = '';
+    RANGES.forEach(([key, days]) => {
+      if (days !== Infinity && days > N) return; // don't offer a range longer than the data
+      const b = document.createElement('button');
+      b.textContent = key === 'all' ? 'All' : key.toUpperCase();
+      b.setAttribute('aria-pressed', !state.zoom && state.range === key);
+      b.onclick = () => { state.range = key; state.zoom = null; render(); };
+      range.appendChild(b);
+    });
+    if (state.zoom) {
+      const b = document.createElement('button');
+      b.textContent = `${fmtDate(state.zoom[0])} – ${fmtDate(state.zoom[1])} ✕`;
+      b.setAttribute('aria-pressed', 'true');
+      b.onclick = () => { state.zoom = null; render(); };
+      range.appendChild(b);
+    }
+
+    const stage = document.getElementById('stage');
+    stage.textContent = '';
+    STAGES.forEach(([key, label]) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.setAttribute('aria-pressed', state.stage === key);
+      b.onclick = () => { state.stage = key; render(); };
+      stage.appendChild(b);
+    });
+
+    const legend = document.getElementById('legend');
+    legend.textContent = '';
+    DATA.series.forEach((s) => {
+      const b = document.createElement('button');
+      b.setAttribute('aria-pressed', !state.hidden.has(s.code));
+      const key = document.createElement('i');
+      key.className = 'key';
+      key.style.background = color(s);
+      const name = document.createElement('span');
+      name.textContent = s.name;
+      b.append(key, name);
+      b.onclick = () => {
+        state.hidden.has(s.code) ? state.hidden.delete(s.code) : state.hidden.add(s.code);
+        render();
+      };
+      legend.appendChild(b);
+    });
+  }
+
+  function render() {
+    saveStored(); // every state change funnels through here — the cheapest one hook
+    drawControls();
+    if (state.tab === 'kanji') {
+      drawKanji();
+      return; // the chart can't measure itself while its container is hidden
+    }
+    drawTiles();
+    drawChart();
+    drawPanels();
+    drawTable();
+  }
+
+  document.getElementById('kanji-filter').addEventListener('input', drawKanji);
+
+  // ── page chrome ─────────────────────────────────────────────────────────────
+  document.getElementById('title').textContent = DATA.title;
+  document.getElementById('subtitle').textContent =
+    `${fmtNum(DATA.total)} words · ${fmtDate(0, true)} – ${fmtDate(N - 1, true)}`;
+
+  function applyTheme() {
+    document.documentElement.dataset.theme = state.theme;
+    const label = { auto: 'Theme: Auto', light: 'Theme: Light', dark: 'Theme: Dark' };
+    document.getElementById('theme').textContent = label[themeOverride];
+    render();
+  }
+  // Follow the OS as it changes, not just as the page loaded (macOS flips at sunset).
+  SYSTEM_DARK.addEventListener('change', applyTheme);
+  document.getElementById('theme').onclick = () => {
+    const cycle = { auto: 'light', light: 'dark', dark: 'auto' };
+    themeOverride = cycle[themeOverride];
+    applyTheme();
+  };
+
+  // "Download a picture" — the one Plotly button worth keeping. Rasterises the chart as it
+  // is on screen, theme and all.
+  document.getElementById('png').onclick = () => {
+    const clone = svg.cloneNode(true);
+    const W = hover ? hover.W : 900, H = hover ? hover.H : 420;
+    clone.setAttribute('width', W * 2);
+    clone.setAttribute('height', H * 2);
+    const bg = el('rect', { x: 0, y: 0, width: W, height: H, fill: css('--surface') });
+    clone.insertBefore(bg, clone.firstChild);
+    const blob = new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = W * 2;
+      canvas.height = H * 2;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = 'gigaku-plots.png';
+      a.click();
+    };
+    img.src = url;
+  };
+
+  addEventListener('resize', () => {
+    if (state.tab === 'vocabulary') { drawChart(); drawPanels(); }
+  });
+  // A restored kanji tab must also restore the views' visibility, which lives in showTab;
+  // and a stored tab from a collection that since lost its Japanese falls back quietly.
+  if (state.tab === 'kanji' && KANJI.length) showTab('kanji');
+  else state.tab = 'vocabulary';
+  applyTheme();
+</script>

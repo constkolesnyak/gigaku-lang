@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Publish on demand, when the report host asks — so the site's report page shows the same
+  week the phone just got. See lib/vocab/publish.py.
+
+  **This used to be com.gigaku.report, and used to run the report too.** The split changed
+  on 2026-08-03: `gigaku report --from-backup` now runs on a separate host, which reads the
+  backup repo's words.json and screenshots the card with its own headless chromium — no
+  Chrome IndexedDB, no AnkiConnect, no word cache needed on that path. So that host sends
+  the report itself, and the only thing left out here is `publish`, which genuinely cannot
+  move: it calls import_words(), and that reads Migaku's list out of *this* Mac's Chrome
+  IndexedDB. The report host writes its week pages into ~/Library/Caches/gigaku/site/report
+  (a shared folder), so this job publishes them with no argument at all.
+
+  Two things this has to get right, both about WatchPaths:
+
+  · **It watches the directory, not the file.** launchd handed a path that does not exist
+    yet watches the parent anyway and can fire spuriously at load; a directory that is
+    always there has no such edge. The job decides whether there is anything to do.
+  · **Removing the trigger fires the job again** — a delete is a change like any other. So
+    the guard comes first: no trigger, exit 0. The re-fire finds nothing and stops. One
+    wasted invocation per run, and no loop.
+
+  The trigger is removed *before* the work, not after: a run that dies half way must not
+  leave a file that re-fires it forever.
+
+  Not having a schedule is deliberate and unchanged: com.gigaku.publish already publishes
+  daily at 01:05, an hour after the backup. This one exists only so the freshly-sent week
+  appears on the site within seconds instead of the next night. If the Mac is asleep the
+  report still went — it is the report host's now — and the page lands with the 01:05 run.
+
+  Install:  cp launchd/com.gigaku.publish-trigger.plist ~/Library/LaunchAgents/
+            launchctl load ~/Library/LaunchAgents/com.gigaku.publish-trigger.plist
+  Run now:  touch ~/.local/share/gigaku/triggers/publish
+  Log:      /tmp/gigaku-publish-trigger.log
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.gigaku.publish-trigger</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/sh</string>
+		<string>-c</string>
+		<string>T=/Users/USERNAME/.local/share/gigaku/triggers/publish; [ -e "$T" ] || exit 0; rm -f "$T"; date "+== %F %T triggered"; /Users/USERNAME/.local/bin/gigaku publish</string>
+	</array>
+	<key>WatchPaths</key>
+	<array>
+		<string>/Users/USERNAME/.local/share/gigaku/triggers</string>
+	</array>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>StandardOutPath</key>
+	<string>/tmp/gigaku-publish-trigger.log</string>
+	<key>StandardErrorPath</key>
+	<string>/tmp/gigaku-publish-trigger.log</string>
+</dict>
+</plist>

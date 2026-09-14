@@ -1,0 +1,617 @@
+<!doctype html>
+<!-- The doctype is load-bearing: without it browsers render in quirks mode, where the box
+     model and line metrics quietly differ from everything this page was designed against. -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gigaku — Titles</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎬</text></svg>">
+
+<!-- Same reasoning as lib/vocab/plots_page.html: this page ships its own light and dark
+     themes, so an extension re-darkening it only breaks the contrast it already got right. -->
+<meta name="darkreader-lock">
+<meta name="color-scheme" content="light dark">
+
+<!--
+  The page `gigaku titles` writes: a Netflix browse gallery joined to IMDb ratings, so the
+  question "what here is actually worth watching" has an answer you can sort by.
+
+  One file, no server, no network — deliberately no <img> either, even though every record
+  carries a boxart URL: 4,000 remote images would make an offline page that only works
+  online, and the ripped data is the point, not the artwork.
+
+  Python fills in the JSON in <script id="data"> — nothing else. See lib/netflix/titles.py.
+-->
+
+<style>
+  :root {
+    --surface: #fcfcfb;
+    --page: #f9f9f7;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --border: rgba(11, 11, 11, 0.1);
+    --wash: rgba(11, 11, 11, 0.04);
+    --accent: #2a78d6;
+    --pin-wash: rgba(42, 120, 214, 0.07);
+    --pin-wash-hover: rgba(42, 120, 214, 0.13);
+    color-scheme: light;
+  }
+  /* Dark is *selected*, not an automatic flip: its own steps, checked against its own
+     surface. The media query is the default signal; an explicit data-theme wins either way. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --surface: #1a1a19; --page: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
+      --muted: #898781; --grid: #2c2c2a; --border: rgba(255, 255, 255, 0.1);
+      --wash: rgba(255, 255, 255, 0.06); --accent: #3987e5;
+      --pin-wash: rgba(57, 135, 229, 0.15); --pin-wash-hover: rgba(57, 135, 229, 0.22);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme='dark'] {
+    --surface: #1a1a19; --page: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
+    --muted: #898781; --grid: #2c2c2a; --border: rgba(255, 255, 255, 0.1);
+    --wash: rgba(255, 255, 255, 0.06); --accent: #3987e5;
+    --pin-wash: rgba(57, 135, 229, 0.15); --pin-wash-hover: rgba(57, 135, 229, 0.22);
+    color-scheme: dark;
+  }
+
+  /* A flex/grid container's `display` outranks the `hidden` attribute. */
+  [hidden] { display: none !important; }
+
+  body {
+    margin: 0; padding: 28px 24px 64px;
+    background: var(--page); color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1320px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 14px; }
+  .spacer { flex: 1; }
+
+  button.ghost, .seg button {
+    font: inherit; font-size: 13px; cursor: pointer; color: var(--ink-2);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+    padding: 5px 11px;
+  }
+  button.ghost:hover, .seg button:hover { color: var(--ink); }
+  .seg { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+  .seg button[aria-pressed='true'] { color: var(--ink); background: var(--wash); border-color: var(--ink-2); }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .tile .k { color: var(--muted); font-size: 12px; }
+  .tile .v { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
+  .filters { display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .filters input, .filters select {
+    font: inherit; font-size: 13px; padding: 6px 11px; color: var(--ink);
+    background: var(--page); border: 1px solid var(--border); border-radius: 9px;
+  }
+  .filters input { min-width: 240px; }
+  .filters input:focus-visible, .filters select:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 1px; }
+  .flabel { color: var(--muted); font-size: 12px; margin-right: -6px; }
+  .count { color: var(--muted); font-size: 13px; }
+
+  .table-wrap { max-height: 74vh; overflow: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: right; padding: 6px 9px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: center; }
+  th.t, td.t { text-align: left; font-variant-numeric: normal; }
+  th { color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--surface); z-index: 1; white-space: nowrap; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--ink); }
+  th .arrow { opacity: 0.5; font-size: 10px; }
+  tbody tr:hover { background: var(--wash); }
+  td a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--border); }
+  td a:hover { border-bottom-color: var(--ink-2); }
+  .alt { color: var(--muted); font-size: 12px; }
+  /* Second column now, so it gets room to be read rather than squinted at — but still one
+     line, because a wrapping genre list would push the ratings off the first screen. */
+  .genres { color: var(--ink-2); max-width: 260px; min-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Rating is a magnitude, so it gets one hue and a length — not a colour scale. The bar is
+     only there so the eye can scan the column; the number stays authoritative. */
+  .rate { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+  .rate .track { height: 4px; border-radius: 2px; width: 46px; background: var(--wash); flex: none; }
+  .rate .fill { height: 100%; border-radius: 2px; display: block; background: var(--accent); }
+  .rate b { min-width: 26px; text-align: right; }
+
+  /* The Gigaku List — your own shortlist, kept in the browser. The toggle takes the place of
+     the rank column: a number you never sort by is worth less than one click per row.
+     Membership gets two signals, not colour alone — a filled button and an accent edge. */
+  th.pin, td.pin { width: 38px; text-align: center; padding-left: 6px; padding-right: 2px; }
+  button.pin {
+    font: inherit; font-size: 15px; line-height: 1; cursor: pointer; padding: 2px 5px;
+    background: none; border: 1px solid transparent; border-radius: 7px;
+    color: var(--muted); opacity: 0.4; transition: opacity 90ms, color 90ms;
+  }
+  tr:hover button.pin { opacity: 1; }
+  button.pin:hover { color: var(--ink); }
+  button.pin:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 1px; opacity: 1; }
+  button.pin[aria-pressed='true'] { color: var(--accent); opacity: 1; }
+
+  tr.pinned > td { background: var(--pin-wash); }
+  tr.pinned > td.pin { box-shadow: inset 3px 0 0 var(--accent); }
+  tr.pinned:hover > td { background: var(--pin-wash-hover); }
+
+  .badge { font-size: 11px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+  .badge.exact { color: var(--ink-2); }
+  .badge.weak, .badge.guess, .badge.none { border-style: dashed; }
+  .pill { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 6px; margin-left: 6px; }
+  /* Origin markers read louder than the housekeeping pills — they're what you scan for. */
+  .pill.tag { color: var(--accent); border-color: var(--accent); }
+  /* NEW is louder still: it's the answer to "what did the gallery hide from me". */
+  .pill.new { color: var(--bg); background: var(--accent); border-color: var(--accent);
+              font-weight: 600; letter-spacing: .04em; }
+  .more { margin-top: 12px; text-align: center; }
+  .empty { color: var(--muted); padding: 40px 0; text-align: center; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1 id="title"></h1>
+    <div class="sub" id="subtitle"></div>
+    <div class="spacer"></div>
+    <div class="seg" id="tabs" role="tablist" aria-label="View"></div>
+    <button class="ghost" id="theme">Theme</button>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <div class="filters" id="filters">
+      <input id="q" type="search" placeholder="Search title, genre, IMDb name…" autocomplete="off">
+      <span class="flabel">Type</span><div class="seg" id="f-type" role="group" aria-label="Type"></div>
+      <span class="flabel">Min votes</span><div class="seg" id="f-votes" role="group" aria-label="Minimum votes"></div>
+      <span class="flabel">Min rating</span><div class="seg" id="f-rating" role="group" aria-label="Minimum rating"></div>
+      <select id="f-genre" aria-label="Genre"></select>
+      <div class="seg" id="f-flags" role="group" aria-label="Flags"></div>
+      <div class="seg" id="f-watched" role="group" aria-label="Watched"></div>
+      <div class="seg" id="f-tag" role="group" aria-label="Origin"></div>
+      <div class="seg" id="f-new" role="group" aria-label="Source"></div>
+      <button class="ghost" id="prune" hidden></button>
+      <div class="spacer"></div>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="table-wrap"><table><thead id="head"></thead><tbody id="rows"></tbody></table></div>
+    <div class="more"><button class="ghost" id="showall" hidden></button></div>
+    <div class="note" id="note"></div>
+  </div>
+</div>
+
+<script id="data" type="application/json">__DATA__</script>
+
+<script>
+  'use strict';
+  const DATA = JSON.parse(document.getElementById('data').textContent);
+  const ROWS = DATA.rows;
+
+  // The Gigaku List is yours, not Netflix's: a shortlist you build while scanning the table.
+  // It lives in the browser because a file:// page cannot write to disk — which is fine, and
+  // survives `gigaku titles` regenerating this file, since localStorage is keyed by origin
+  // rather than by the page's contents. Keyed per gallery so two galleries can't share a list.
+  const LIST_KEY = 'gigaku.titles.list.' + (DATA.genre_id || 'default');
+
+  function loadList() {
+    try {
+      const raw = localStorage.getItem(LIST_KEY);
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch (e) {
+      return new Set();  // private mode / storage disabled — the list is session-only
+    }
+  }
+
+  function saveList() {
+    try {
+      localStorage.setItem(LIST_KEY, JSON.stringify([...state.list]));
+    } catch (e) { /* nothing to do; the in-memory list still works for this session */ }
+  }
+
+  const state = {
+    tab: 'titles',
+    q: '',
+    type: 'all',
+    votes: 0,
+    rating: 0,
+    genre: '',
+    flag: 'all',           // all | mine (Netflix My List) | gigaku (the list on this page)
+    // Default to hiding what you've already seen: the whole question is what to watch NEXT.
+    watched: 'hide',       // hide | all | only
+    tag: 'all',            // all | anime | korean
+    source: 'all',         // all | new — "new" = not in the gallery's own list (r.discovery)
+    list: loadList(),
+    sort: { key: 'weighted', dir: -1 },
+    limit: 400,
+  };
+
+  const fmt = (n) => n === null || n === undefined || n === '' ? '—' : Number(n).toLocaleString();
+  const el = (tag, cls, text) => {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  };
+
+  function length(r) {
+    if (r.type === 'movie') return r.runtime_min ? r.runtime_min + ' min' : '—';
+    const seasons = r.seasons_label || (r.seasons ? r.seasons + (r.seasons > 1 ? ' seasons' : ' season') : '');
+    const eps = r.episodes ? r.episodes + ' eps' : '';
+    return [seasons, eps].filter(Boolean).join(' · ') || '—';
+  }
+
+  // ── filtering ──────────────────────────────────────────────────────────────
+
+  function haystack(r) {
+    if (r.__hay === undefined) {
+      r.__hay = [r.title, r.imdb_title, (r.imdb_genres || []).join(' '),
+                 (r.nf_genres || []).join(' '), r.year, r.maturity,
+                 r.is_anime ? 'anime' : '', r.is_korean ? 'korean' : '']
+        .filter(Boolean).join(' ').toLowerCase();
+    }
+    return r.__hay;
+  }
+
+  function visible() {
+    const q = state.q.trim().toLowerCase();
+    const unmatched = state.tab === 'unmatched';
+    return ROWS.filter((r) => {
+      if (unmatched !== !r.imdb_rating) return false;
+      if (state.type !== 'all' && r.type !== state.type) return false;
+      if (state.flag === 'mine' && !r.in_my_list) return false;
+      if (state.flag === 'gigaku' && !state.list.has(r.nf_id)) return false;
+      if (state.watched === 'hide' && r.watched) return false;
+      if (state.watched === 'only' && !r.watched) return false;
+      if (state.tag === 'anime' && !r.is_anime) return false;
+      if (state.tag === 'korean' && !r.is_korean) return false;
+      if (state.source === 'new' && !r.discovery) return false;
+      if (!unmatched) {
+        if (state.votes && (r.imdb_votes || 0) < state.votes) return false;
+        if (state.rating && (r.imdb_rating || 0) < state.rating) return false;
+        if (state.genre && !(r.imdb_genres || []).includes(state.genre)) return false;
+      }
+      if (q && !haystack(r).includes(q)) return false;
+      return true;
+    });
+  }
+
+  const KEYS = {
+    rank: (r) => r.rank,
+    title: (r) => (r.title || '').toLowerCase(),
+    type: (r) => r.type || '',
+    year: (r) => r.year || 0,
+    imdb_rating: (r) => r.imdb_rating || 0,
+    imdb_votes: (r) => r.imdb_votes || 0,
+    weighted: (r) => r.weighted || 0,
+    length: (r) => r.type === 'movie' ? (r.runtime_min || 0) : (r.episodes || 0),
+    match_confidence: (r) => r.match_score || 0,
+  };
+
+  function sorted(list) {
+    const get = KEYS[state.sort.key] || KEYS.weighted;
+    const dir = state.sort.dir;
+    return list.slice().sort((a, b) => {
+      const x = get(a), y = get(b);
+      if (x < y) return -dir;
+      if (x > y) return dir;
+      // Stable, meaningful tiebreak: the ranking metric, then the gallery's own order.
+      return (b.weighted || 0) - (a.weighted || 0) || a.rank - b.rank;
+    });
+  }
+
+  // ── table ──────────────────────────────────────────────────────────────────
+
+  const COLUMNS = [
+    { key: 'pin', label: '', pin: true },
+    { key: 'title', label: 'Title', sortable: true, text: true },
+    { key: 'genres', label: 'Genres', text: true },
+    { key: 'type', label: 'Type', sortable: true, text: true },
+    { key: 'year', label: 'Year', sortable: true },
+    { key: 'imdb_rating', label: 'IMDb', sortable: true },
+    { key: 'imdb_votes', label: 'Votes', sortable: true },
+    { key: 'weighted', label: 'Weighted', sortable: true },
+    { key: 'length', label: 'Length', sortable: true },
+    { key: 'match_confidence', label: 'Match', sortable: true, text: true },
+  ];
+
+  function drawHead() {
+    const head = document.getElementById('head');
+    head.textContent = '';
+    const tr = el('tr');
+    for (const col of COLUMNS) {
+      const th = el('th', col.pin ? 'pin' : col.text ? 't' : '');
+      if (col.pin) th.title = 'Gigaku List';
+      th.appendChild(document.createTextNode(col.label));
+      if (col.sortable) {
+        th.classList.add('sortable');
+        th.tabIndex = 0;
+        if (state.sort.key === col.key) {
+          th.appendChild(el('span', 'arrow', state.sort.dir === -1 ? ' ▼' : ' ▲'));
+        }
+        const activate = () => {
+          if (state.sort.key === col.key) state.sort.dir = -state.sort.dir;
+          else state.sort = { key: col.key, dir: col.key === 'title' || col.key === 'rank' ? 1 : -1 };
+          draw();
+        };
+        th.addEventListener('click', activate);
+        th.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
+      }
+      tr.appendChild(th);
+    }
+    head.appendChild(tr);
+  }
+
+  function drawRows(list) {
+    const body = document.getElementById('rows');
+    body.textContent = '';
+    const shown = list.slice(0, state.limit);
+    for (const r of shown) {
+      const tr = el('tr');
+      const listed = state.list.has(r.nf_id);
+      if (listed) tr.classList.add('pinned');
+
+      // The Gigaku List toggle, in the rank column's place.
+      const tdPin = el('td', 'pin');
+      const pin = el('button', 'pin', listed ? '★' : '☆');
+      pin.setAttribute('aria-pressed', String(listed));
+      pin.title = listed ? 'Remove from Gigaku List' : 'Add to Gigaku List';
+      pin.setAttribute('aria-label', pin.title + ': ' + (r.title || ''));
+      pin.addEventListener('click', () => {
+        if (state.list.has(r.nf_id)) state.list.delete(r.nf_id);
+        else state.list.add(r.nf_id);
+        saveList();
+        drawTiles();
+        updatePrune();
+        // Redraw the row in place rather than the table: re-sorting under the cursor after a
+        // click would move the next row you meant to click.
+        const now = state.list.has(r.nf_id);
+        tr.classList.toggle('pinned', now);
+        pin.textContent = now ? '★' : '☆';
+        pin.setAttribute('aria-pressed', String(now));
+        pin.title = now ? 'Remove from Gigaku List' : 'Add to Gigaku List';
+        pin.setAttribute('aria-label', pin.title + ': ' + (r.title || ''));
+        if (state.flag === 'gigaku' && !now) draw();  // it no longer belongs in this view
+      });
+      tdPin.appendChild(pin);
+      tr.appendChild(tdPin);
+
+      // Title — links to Netflix; the IMDb name rides underneath when it differs.
+      const tdTitle = el('td', 't');
+      const link = el('a', null, r.title);
+      link.href = r.nf_url || '#';
+      link.target = '_blank';
+      link.rel = 'noreferrer';
+      tdTitle.appendChild(link);
+      // The gallery is a storefront, not the catalogue: these came from a sort list it never
+      // shows, or were named by id. Saying where makes the claim checkable.
+      if (r.discovery) {
+        const pill = el('span', 'pill new', 'NEW');
+        pill.title = r.discovery === 'manual'
+          ? 'Added by id (TITLES_EXTRA_IDS) — the gallery does not list it'
+          : 'Not in the gallery’s own list; found via ' + r.discovery;
+        tdTitle.appendChild(pill);
+      }
+      if (r.is_original) tdTitle.appendChild(el('span', 'pill', 'Original'));
+      if (r.in_my_list) tdTitle.appendChild(el('span', 'pill', 'My List'));
+      if (r.watched) tdTitle.appendChild(el('span', 'pill', 'Watched'));
+      // Netflix's own classification, not an IMDb genre guess — see lib/netflix/markers.py.
+      if (r.is_anime) tdTitle.appendChild(el('span', 'pill tag', 'Anime'));
+      if (r.is_korean) tdTitle.appendChild(el('span', 'pill tag', 'Korean'));
+      if (r.imdb_title && r.imdb_title !== r.title) {
+        tdTitle.appendChild(el('div', 'alt', r.imdb_title));
+      }
+      tr.appendChild(tdTitle);
+
+      const tdGenres = el('td', 't');
+      const genres = el('div', 'genres', (r.imdb_genres || []).join(', ') || '—');
+      // Hover gives Netflix's own rows, which are more specific than IMDb's three words
+      // ("K-Dramas based on Webtoon" vs "Drama").
+      genres.title = [(r.imdb_genres || []).join(', '),
+                      (r.nf_genres || []).length ? 'Netflix: ' + r.nf_genres.join(' · ') : '']
+        .filter(Boolean).join('\n');
+      tdGenres.appendChild(genres);
+      tr.appendChild(tdGenres);
+
+      tr.appendChild(el('td', 't', r.type === 'show' ? 'Series' : 'Film'));
+      tr.appendChild(el('td', '', r.year || '—'));
+
+      // Rating: number + a length. One hue, so it reads as magnitude, not category.
+      const tdRate = el('td');
+      if (r.imdb_rating) {
+        const box = el('div', 'rate');
+        const track = el('div', 'track');
+        const fill = el('span', 'fill');
+        fill.style.width = Math.round((r.imdb_rating / 10) * 100) + '%';
+        track.appendChild(fill);
+        box.appendChild(track);
+        box.appendChild(el('b', null, r.imdb_rating.toFixed(1)));
+        tdRate.appendChild(box);
+      } else tdRate.textContent = '—';
+      tr.appendChild(tdRate);
+
+      tr.appendChild(el('td', '', fmt(r.imdb_votes)));
+      tr.appendChild(el('td', '', r.weighted ? r.weighted.toFixed(2) : '—'));
+      tr.appendChild(el('td', '', length(r)));
+
+      // Match quality is shown, never hidden — a wrong join should be visible as a wrong join.
+      const tdMatch = el('td', 't');
+      const badge = el('span', 'badge ' + (r.match_confidence || 'none'), r.match_confidence || 'none');
+      badge.title = r.match_note || '';
+      tdMatch.appendChild(badge);
+      if (r.imdb_url) {
+        const imdb = el('a', null, ' ↗');
+        imdb.href = r.imdb_url;
+        imdb.target = '_blank';
+        imdb.rel = 'noreferrer';
+        tdMatch.appendChild(imdb);
+      } else {
+        const find = el('a', null, ' search');
+        find.href = 'https://www.imdb.com/find/?q=' + encodeURIComponent(r.title || '');
+        find.target = '_blank';
+        find.rel = 'noreferrer';
+        tdMatch.appendChild(find);
+      }
+      tr.appendChild(tdMatch);
+
+      body.appendChild(tr);
+    }
+
+    if (!shown.length) {
+      const tr = el('tr');
+      const td = el('td', 'empty', 'Nothing matches those filters.');
+      td.colSpan = COLUMNS.length;
+      tr.appendChild(td);
+      body.appendChild(tr);
+    }
+
+    const button = document.getElementById('showall');
+    // Never silently truncate: if rows are being held back, say how many and offer them.
+    button.hidden = list.length <= state.limit;
+    button.textContent = 'Show all ' + list.length.toLocaleString() + ' rows';
+    // ROWS is already the genre-filtered set, so it can't be called "ripped" — that number
+    // is the gallery's, and saying otherwise would quietly under-report the rip.
+    document.getElementById('count').textContent =
+      shown.length.toLocaleString() + ' of ' + list.length.toLocaleString() +
+      (list.length < DATA.stats.total
+        ? ' (' + DATA.stats.total.toLocaleString() + ' in the gallery)' : '');
+  }
+
+  function draw() {
+    drawHead();
+    drawRows(sorted(visible()));
+
+    updatePrune();
+  }
+
+  function updatePrune() {
+    const stale = ROWS.filter((r) => r.watched && state.list.has(r.nf_id)).length;
+    const prune = document.getElementById('prune');
+    prune.hidden = !stale;
+    prune.textContent = 'Remove ' + stale + ' watched from Gigaku List';
+  }
+
+  // ── controls ───────────────────────────────────────────────────────────────
+
+  function segment(id, options, get, set) {
+    const box = document.getElementById(id);
+    box.textContent = '';
+    for (const [value, label] of options) {
+      const button = el('button', null, label);
+      button.setAttribute('aria-pressed', String(get() === value));
+      button.addEventListener('click', () => {
+        set(value);
+        state.limit = 400;
+        segment(id, options, get, set);
+        draw();
+      });
+      box.appendChild(button);
+    }
+  }
+
+  function drawTiles() {
+    const s = DATA.stats;
+    const tiles = [
+      ['Titles ripped', fmt(s.total)],
+      ['With an IMDb rating', fmt(s.matched) + (s.total ? ' · ' + Math.round(100 * s.matched / s.total) + '%' : '')],
+      ['Median rating', s.median === null ? '—' : s.median.toFixed(1)],
+      ['Rated 8.0+', fmt(s.great)],
+      ['Already watched', fmt(s.watched)],
+      ['In Gigaku List', fmt(state.list.size)],
+    ];
+    // Only worth a tile when the storefront actually hid something from you.
+    if (s.discovered) tiles.splice(1, 0, ['Not in the gallery', fmt(s.discovered)]);
+    const box = document.getElementById('tiles');
+    box.textContent = '';
+    for (const [k, v] of tiles) {
+      const tile = el('div', 'tile');
+      tile.appendChild(el('div', 'k', k));
+      tile.appendChild(el('div', 'v', v));
+      box.appendChild(tile);
+    }
+  }
+
+  function init() {
+    document.getElementById('title').textContent = DATA.name || 'Netflix titles';
+    document.getElementById('subtitle').textContent =
+      DATA.stats.total.toLocaleString() + ' titles · ripped ' + DATA.ripped +
+      (DATA.lang ? ' · ' + DATA.lang.toUpperCase() + ' audio' : '');
+    const hidden = (DATA.hidden_genres || []).length && DATA.hidden_count
+      ? DATA.hidden_count.toLocaleString() + ' ' + DATA.hidden_genres.join('/') +
+        ' titles are left out of this page (still in the CSV — re-run with '
+        + "--titles-hide-genres '' to see them). "
+      : '';
+    document.getElementById('note').textContent = hidden +
+      'Weighted = (v/(v+m))·R + (m/(v+m))·C with m=' + DATA.bayes[0] + ', C=' + DATA.bayes[1] +
+      ' — it stops 9.5-from-40-votes outranking 8.5-from-200k. Hover a match badge for how it was matched.';
+
+    drawTiles();
+
+    segment('tabs', [['titles', 'Titles'], ['unmatched', 'Unmatched']],
+      () => state.tab, (v) => { state.tab = v; });
+    segment('f-type', [['all', 'All'], ['movie', 'Films'], ['show', 'Series']],
+      () => state.type, (v) => { state.type = v; });
+    segment('f-votes', [[0, 'Any'], [1000, '1k'], [10000, '10k'], [100000, '100k']],
+      () => state.votes, (v) => { state.votes = v; });
+    segment('f-rating', [[0, 'Any'], [7, '7+'], [7.5, '7.5+'], [8, '8+']],
+      () => state.rating, (v) => { state.rating = v; });
+    segment('f-flags', [['all', 'Everything'], ['mine', 'My List only'],
+                        ['gigaku', 'Gigaku List only']],
+      () => state.flag, (v) => { state.flag = v; });
+    // Three states, labelled so the inverse of "Hide watched" is obvious: the middle one used
+    // to read "Show watched", which is what you'd click looking for "only the watched ones".
+    segment('f-watched', [['hide', 'Hide watched'], ['all', 'Include watched'],
+                          ['only', 'Only watched']],
+      () => state.watched, (v) => { state.watched = v; });
+    // Only offered when the markers actually ran — an empty filter that hides everything is
+    // worse than no filter.
+    const tags = [['all', 'Any origin']];
+    if (ROWS.some((r) => r.is_anime)) tags.push(['anime', 'Anime']);
+    if (ROWS.some((r) => r.is_korean)) tags.push(['korean', 'Korean']);
+    if (tags.length > 1) {
+      segment('f-tag', tags, () => state.tag, (v) => { state.tag = v; });
+    }
+    // Same rule as the origin markers: offered only when there is something to filter to.
+    if (ROWS.some((r) => r.discovery)) {
+      segment('f-new', [['all', 'Any source'], ['new', 'NEW only']],
+        () => state.source, (v) => { state.source = v; });
+    }
+
+    // Watched titles you'd starred before seeing them: cleared on request, never silently —
+    // the Gigaku List is hand-made, so pruning it is a decision, not a side effect.
+    document.getElementById('prune').addEventListener('click', () => {
+      for (const r of ROWS) if (r.watched) state.list.delete(r.nf_id);
+      saveList();
+      drawTiles();
+      draw();
+    });
+
+    const genre = document.getElementById('f-genre');
+    genre.appendChild(new Option('All genres', ''));
+    for (const g of DATA.genres) genre.appendChild(new Option(g, g));
+    genre.addEventListener('change', () => { state.genre = genre.value; state.limit = 400; draw(); });
+
+    let timer = null;
+    document.getElementById('q').addEventListener('input', (e) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { state.q = e.target.value; state.limit = 400; draw(); }, 90);
+    });
+
+    document.getElementById('showall').addEventListener('click', () => {
+      state.limit = Infinity;
+      draw();
+    });
+    document.getElementById('theme').addEventListener('click', () => {
+      const dark = getComputedStyle(document.documentElement).getPropertyValue('color-scheme').trim() === 'dark';
+      document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+    });
+
+    draw();
+  }
+
+  init();
+</script>
